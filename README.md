@@ -25,10 +25,10 @@ Once installed it works offline, so a bookstore with no signal is fine for check
 
 ## Using it
 
-- **Add to library**: use this at home. Start the camera and scan books one after another. Each one is added automatically, with its title, author and cover.
+- **Add to library**: use this at home. Start the camera and scan books one after another. Each one is added automatically as **TBR**, with its title, author and cover.
 - **Check**: use this at the store. You'll see a green **You already own this**, a yellow **On your wishlist**, or a red **Not in your library**. It also tells you if you own a different edition of the same title.
 - **Add to wishlist**: for books you want to buy later.
-- **Library tab**: search by title, author, ISBN or shelf. Tap a book to edit it, set its shelf or location, add notes, or delete it.
+- **Library tab**: search by title, author, ISBN or shelf. Tap a book to edit it, set its status (Read, TBR, Wishlist or Donated) and source (Purchased or Rented), add notes, or delete it.
 - **More tab**: back up, export to CSV, import, add a book by hand (for ones with no barcode), and fetch missing details.
 
 ### Barcode tips

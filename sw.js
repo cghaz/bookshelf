@@ -1,5 +1,5 @@
 /* ShelfScan service worker: lets the app open with no signal (e.g. inside a bookstore). */
-const SHELL = 'shelfscan-shell-v1';
+const SHELL = 'shelfscan-shell-v2';
 const RUNTIME = 'shelfscan-runtime-v1';
 const FILES = ['./', 'index.html', 'app.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 

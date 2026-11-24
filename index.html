@@ -54,7 +54,7 @@ label{font-size:13px;color:var(--muted);display:block;margin:12px 0 4px}
 .manual{display:flex;gap:8px;margin-top:12px}.manual input{flex:1}.manual button{flex:none}
 .card{background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:16px;margin-top:14px}
 .verdict{border-radius:14px;padding:14px 16px;font:700 20px/1.2 Georgia,serif;margin:-4px -4px 14px}
-.v-own{background:var(--okbg);color:var(--ok)}.v-wish{background:var(--wishbg);color:var(--wish)}.v-no{background:var(--nobg);color:var(--no)}
+.v-don{background:var(--line);color:var(--muted)}.v-own{background:var(--okbg);color:var(--ok)}.v-wish{background:var(--wishbg);color:var(--wish)}.v-no{background:var(--nobg);color:var(--no)}
 .v-sub{display:block;font:500 14px system-ui;margin-top:4px;opacity:.9}
 .book{display:flex;gap:14px;align-items:flex-start}
 .cover{width:72px;height:108px;flex:none;border-radius:6px;background:var(--line);object-fit:cover;display:grid;place-items:center;color:var(--muted);font:700 22px Georgia,serif;overflow:hidden}
@@ -68,6 +68,9 @@ label{font-size:13px;color:var(--muted);display:block;margin:12px 0 4px}
 .list .t{font-weight:600;line-height:1.25}
 .list .a{font-size:14px;color:var(--muted)}
 .tag{display:inline-block;font:600 11px system-ui;padding:2px 7px;border-radius:99px;background:var(--wishbg);color:var(--wish);margin-left:6px;vertical-align:2px}
+.tag.t-read{background:var(--okbg);color:var(--ok)}
+.tag.t-tbr{background:var(--line);color:var(--ink)}
+.tag.t-donated{background:var(--line);color:var(--muted)}
 .chips{display:flex;gap:8px;margin:10px 0;flex-wrap:wrap;align-items:center}
 .chips button{min-height:36px;padding:6px 14px;font-size:14px;border-radius:99px}
 .chips button.on{background:var(--green2);color:#fff;border-color:transparent}
@@ -82,7 +85,7 @@ label{font-size:13px;color:var(--muted);display:block;margin:12px 0 4px}
 .more h2{font:600 18px Georgia,serif;margin:22px 0 6px}
 .more .card{margin-top:8px}
 .stat{display:flex;gap:10px}.stat div{flex:1;background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:12px;text-align:center}
-.stat b{display:block;font:700 26px Georgia,serif}
+.stat b{display:block;font:700 22px Georgia,serif}
 .stat span{font-size:13px;color:var(--muted)}
 .spin{display:inline-block;width:16px;height:16px;border:2px solid var(--line);border-top-color:var(--green2);border-radius:50%;animation:s .8s linear infinite;vertical-align:-3px;margin-right:6px}
 @keyframes s{to{transform:rotate(360deg)}}
@@ -120,11 +123,13 @@ label{font-size:13px;color:var(--muted);display:block;margin:12px 0 4px}
 
   <!-- LIBRARY -->
   <section class="view" id="v-lib">
-    <input id="search" type="search" placeholder="Search title, author, ISBN, shelf…">
+    <input id="search" type="search" placeholder="Search title, author, ISBN, notes…">
     <div class="chips" id="filterChips">
       <button data-f="all" class="on">All</button>
-      <button data-f="own">Owned</button>
+      <button data-f="read">Read</button>
+      <button data-f="tbr">TBR</button>
       <button data-f="wish">Wishlist</button>
+      <button data-f="donated">Donated</button>
       <select id="sort">
         <option value="added">Newest</option>
         <option value="title">Title</option>
@@ -137,9 +142,10 @@ label{font-size:13px;color:var(--muted);display:block;margin:12px 0 4px}
   <!-- MORE -->
   <section class="view more" id="v-more">
     <div class="stat">
-      <div><b id="stOwn">0</b><span>Owned</span></div>
+      <div><b id="stRead">0</b><span>Read</span></div>
+      <div><b id="stTbr">0</b><span>TBR</span></div>
       <div><b id="stWish">0</b><span>Wishlist</span></div>
-      <div><b id="stAuth">0</b><span>Authors</span></div>
+      <div><b id="stDon">0</b><span>Donated</span></div>
     </div>
 
     <h2>Add a book by hand</h2>

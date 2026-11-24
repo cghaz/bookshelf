@@ -1,6 +1,6 @@
 /* ShelfScan — personal book inventory. All data stays on this device (localStorage). */
 {
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const KEY = 'shelfscan.books.v1';
 const META = 'shelfscan.meta.v1';
 const $ = s => document.querySelector(s);
@@ -9,6 +9,26 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 /* ---------- storage ---------- */
 let books = load(KEY, {});
 let meta = load(META, {});
+
+/* ---------- statuses & sources ---------- */
+const STATUSES = ['read','tbr','wish','donated'];
+const STATUS_LABEL = {read:'Read', tbr:'TBR', wish:'Wishlist', donated:'Donated'};
+const SOURCE_LABEL = {purchased:'Purchased', rented:'Rented'};
+const isOwned = s => s === 'read' || s === 'tbr';
+const normStatus = s => STATUSES.includes(s) ? s : 'tbr';   // older versions used "own" -> now TBR
+function mapStatusText(s){                                   // for CSV imports (Goodreads etc.)
+  s = String(s||'').toLowerCase();
+  if (/donat/.test(s)) return 'donated';
+  if (/to-read|want|wish|planned/.test(s)) return 'wish';
+  if (/^(read|finished)$/.test(s)) return 'read';
+  return 'tbr';
+}
+const mapSourceText = s => /rent|borrow/i.test(s||'') ? 'rented' : /purchas|bought|buy/i.test(s||'') ? 'purchased' : '';
+{ // one-time upgrade of books saved by the old version
+  let changed = false;
+  for (const b of Object.values(books)) if (!STATUSES.includes(b.status)){ b.status = normStatus(b.status); changed = true; }
+  if (changed) try { localStorage.setItem(KEY, JSON.stringify(books)); } catch {}
+}
 function load(k, d){ try { return JSON.parse(localStorage.getItem(k)) || d; } catch { return d; } }
 function save(){
   try { localStorage.setItem(KEY, JSON.stringify(books)); }
@@ -98,7 +118,7 @@ function addBook(isbn, info, status){
   const prev = books[id];
   books[id] = Object.assign({
     id, isbn: isbn||'', title: 'Untitled', subtitle:'', authors: [], publisher:'', year:'', pages:'',
-    cover:'', shelf:'', notes:'', added: Date.now()
+    cover:'', source:'', notes:'', added: Date.now()
   }, prev||{}, info||{}, {status});
   save();
   return books[id];
@@ -133,7 +153,7 @@ function buzz(p){ try { navigator.vibrate && navigator.vibrate(p); } catch {} }
 let mode = 'check';
 const hints = {
   check: 'At the store: scan a book to see if you already have it.',
-  own: 'At home: scan your books one after another — each is added to your library automatically.',
+  own: 'At home: scan your books one after another — each is added to your library as TBR (change it any time in Details).',
   wish: 'Scan books you want to remember to buy later.'
 };
 function setMode(m){
@@ -265,10 +285,10 @@ async function handle(raw, fromCam){
   }
 
   // add modes
-  const status = mode;
-  if (have && have.status === status){
+  const status = mode === 'own' ? 'tbr' : 'wish';
+  if (have && (isOwned(have.status) || have.status === status)){
     buzz(200);
-    renderResult(have, have.status, `Already ${status==='own'?'in your library':'on your wishlist'}`);
+    renderResult(have, have.status, isOwned(have.status) ? 'Already in your library' : 'Already on your wishlist');
     toast('Already have it: ' + (have.title||isbn));
     return;
   }
@@ -277,8 +297,8 @@ async function handle(raw, fromCam){
   let info = have ? null : await lookup(isbn);
   if (my !== seq && !fromCam) return;
   const b = addBook(isbn, info || (have ? null : {title: 'ISBN ' + isbn, needsInfo: true}), status);
-  toast((status==='own' ? 'Added: ' : 'Wishlisted: ') + b.title);
-  if (my === seq) renderResult(b, status, status==='own' ? 'Added to your library' : 'Added to your wishlist');
+  toast((status==='tbr' ? 'Added: ' : 'Wishlisted: ') + b.title);
+  if (my === seq) renderResult(b, status, status==='tbr' ? 'Added to your library' : 'Added to your wishlist');
 }
 
 function coverHTML(b){
@@ -292,21 +312,23 @@ function bookBlock(b){
     <h3>${esc(b.title || 'Unknown title')}${b.subtitle ? `<span class="meta" style="display:block;font:400 14px system-ui">${esc(b.subtitle)}</span>`:''}</h3>
     ${by ? `<div>${esc(by)}</div>`:''}
     <div class="meta">${esc(bits)}</div>
-    <div class="meta">ISBN ${esc(b.isbn||'—')}${b.shelf ? ' · Shelf: '+esc(b.shelf):''}</div>
+    <div class="meta">ISBN ${esc(b.isbn||'—')}${SOURCE_LABEL[b.source] ? ' · '+SOURCE_LABEL[b.source] : ''}</div>
   </div></div>`;
 }
 function renderResult(b, status, headline){
   const out = $('#result');
   let v;
-  if (status === 'own') v = `<div class="verdict v-own">${esc(headline || 'You already own this')}<span class="v-sub">Added ${new Date(b.added).toLocaleDateString()}</span></div>`;
+  if (status === 'read') v = `<div class="verdict v-own">${esc(headline || 'You already own this')}<span class="v-sub">Read · added ${new Date(b.added).toLocaleDateString()}</span></div>`;
+  else if (status === 'tbr') v = `<div class="verdict v-own">${esc(headline || 'You already own this')}<span class="v-sub">On your TBR · added ${new Date(b.added).toLocaleDateString()}</span></div>`;
+  else if (status === 'donated') v = `<div class="verdict v-don">${esc(headline || 'You donated this')}<span class="v-sub">You no longer own it</span></div>`;
   else if (status === 'wish') v = `<div class="verdict v-wish">${esc(headline || 'On your wishlist')}<span class="v-sub">You don’t own it yet</span></div>`;
   else {
     const oe = b.title ? otherEdition(b.isbn, b.title) : null;
-    v = `<div class="verdict v-no">Not in your library<span class="v-sub">${oe ? 'But you have another edition: “'+esc(oe.title)+'” ('+(oe.status==='own'?'owned':'wishlist')+')' : (b.title ? 'Safe to buy' : 'Book details not found online')}</span></div>`;
+    v = `<div class="verdict v-no">Not in your library<span class="v-sub">${oe ? 'But you have another edition: “'+esc(oe.title)+'” ('+(STATUS_LABEL[oe.status]||'')+')' : (b.title ? 'Safe to buy' : 'Book details not found online')}</span></div>`;
   }
   let actions = '';
-  if (!status) actions = `<div class="row actions"><button class="btn-p" data-act="own">I bought it</button><button class="btn-w" data-act="wish">Wishlist</button></div>`;
-  else if (status === 'wish') actions = `<div class="row actions"><button class="btn-p" data-act="own">I bought it</button><button class="btn" data-act="edit">Details</button></div>`;
+  if (!status) actions = `<div class="row actions"><button class="btn-p" data-act="tbr">I bought it</button><button class="btn-w" data-act="wish">Wishlist</button></div>`;
+  else if (status === 'wish') actions = `<div class="row actions"><button class="btn-p" data-act="tbr">I bought it</button><button class="btn" data-act="edit">Details</button></div>`;
   else actions = `<div class="row actions"><button class="btn" data-act="edit">Details</button></div>`;
   if (paused) actions += `<button class="btn" data-act="next" style="width:100%;margin-top:10px">Scan next book</button>`;
   out.innerHTML = `<div class="card">${v}${b.title ? bookBlock(b) : `<div class="meta">ISBN ${esc(b.isbn)}</div>`}${actions}</div>`;
@@ -316,7 +338,7 @@ function renderResult(b, status, headline){
     if (a === 'edit'){ openEditor(b.id); return; }
     const info = b.title ? b : {title: 'ISBN ' + b.isbn, needsInfo: true};
     const nb = addBook(b.isbn, books[b.isbn] ? null : info, a);
-    toast(a === 'own' ? 'Added to your library' : 'Added to wishlist');
+    toast(a === 'tbr' ? 'Added to your library' : 'Added to wishlist');
     renderResult(nb, a);
     if (!b.title) openEditor(nb.id);
   };
@@ -339,7 +361,7 @@ function renderList(){
   const q = $('#search').value.trim().toLowerCase();
   const qd = digits(q);
   let arr = Object.values(books).filter(b => filter === 'all' || b.status === filter);
-  if (q) arr = arr.filter(b => [b.title, b.subtitle, (b.authors||[]).join(' '), b.shelf, b.notes, b.publisher].join(' ').toLowerCase().includes(q) || (qd.length >= 4 && (b.isbn||'').includes(qd)));
+  if (q) arr = arr.filter(b => [b.title, b.subtitle, (b.authors||[]).join(' '), b.notes, b.publisher].join(' ').toLowerCase().includes(q) || (qd.length >= 4 && (b.isbn||'').includes(qd)));
   const s = $('#sort').value;
   const lastName = b => ((b.authors||[])[0]||'').trim().split(/\s+/).pop().toLowerCase();
   arr.sort(s === 'title' ? (a,b) => normTitle(a.title).localeCompare(normTitle(b.title))
@@ -351,8 +373,8 @@ function renderList(){
     return;
   }
   list.innerHTML = arr.map(b => `<li data-id="${esc(b.id)}">${coverHTML(b)}<div>
-      <div class="t">${esc(b.title)}${b.status==='wish'?'<span class="tag">Wishlist</span>':''}</div>
-      <div class="a">${esc((b.authors||[]).join(', ') || '—')}${b.shelf ? ' · '+esc(b.shelf):''}</div>
+      <div class="t">${esc(b.title)}<span class="tag t-${esc(b.status)}">${esc(STATUS_LABEL[b.status]||'')}</span></div>
+      <div class="a">${esc((b.authors||[]).join(', ') || '—')}</div>
     </div></li>`).join('');
 }
 $('#list').addEventListener('click', e => { const li = e.target.closest('li[data-id]'); if (li) openEditor(li.dataset.id); });
@@ -364,7 +386,7 @@ sheetBg.addEventListener('click', e => { if (e.target === sheetBg) closeSheet();
 
 function openEditor(id){
   const isNew = !id;
-  const b = isNew ? {id:'', isbn:'', title:'', subtitle:'', authors:[], publisher:'', year:'', shelf:'', notes:'', status:'own', added: Date.now()} : books[id];
+  const b = isNew ? {id:'', isbn:'', title:'', subtitle:'', authors:[], publisher:'', year:'', source:'', notes:'', status:'tbr', added: Date.now()} : books[id];
   if (!b) return;
   sheet.innerHTML = `
     <h2>${isNew ? 'Add a book' : 'Book details'}</h2>
@@ -377,21 +399,22 @@ function openEditor(id){
         <div><label for="edYear">Year</label><input id="edYear" inputmode="numeric" value="${esc(b.year)}"></div>
       </div>
       <div class="row">
-        <div><label for="edStatus">Status</label><select id="edStatus"><option value="own">Owned</option><option value="wish">Wishlist</option></select></div>
-        <div><label for="edShelf">Shelf / location</label><input id="edShelf" value="${esc(b.shelf)}" placeholder="e.g. Office, top"></div>
+        <div><label for="edStatus">Status</label><select id="edStatus"><option value="read">Read</option><option value="tbr">TBR</option><option value="wish">Wishlist</option><option value="donated">Donated</option></select></div>
+        <div><label for="edSource">Source</label><select id="edSource"><option value="">—</option><option value="purchased">Purchased</option><option value="rented">Rented</option></select></div>
       </div>
       <label for="edNotes">Notes</label><textarea id="edNotes" rows="2" placeholder="Signed copy, lent to…, read 2025">${esc(b.notes)}</textarea>
       <div class="row actions"><button class="btn-p" type="submit">Save</button><button class="btn" type="button" id="edCancel">Cancel</button></div>
       ${isNew ? '' : `<div class="row actions">${b.isbn ? '<button class="btn" type="button" id="edRefresh">Re-fetch details</button>':''}<button class="btn btn-d" type="button" id="edDel">Delete</button></div>`}
     </form>`;
-  $('#edStatus').value = b.status || 'own';
+  $('#edStatus').value = b.status || 'tbr';
+  $('#edSource').value = b.source || '';
   sheetBg.classList.add('on');
   $('#edCancel').onclick = closeSheet;
   $('#edForm').onsubmit = async e => {
     e.preventDefault();
     const fields = {
       title: $('#edTitle').value.trim(), authors: $('#edAuth').value.split(',').map(s=>s.trim()).filter(Boolean),
-      year: $('#edYear').value.trim(), shelf: $('#edShelf').value.trim(), notes: $('#edNotes').value.trim(), needsInfo: false
+      year: $('#edYear').value.trim(), source: $('#edSource').value, notes: $('#edNotes').value.trim(), needsInfo: false
     };
     const status = $('#edStatus').value;
     if (isNew){
@@ -422,14 +445,16 @@ $('#addManualBtn').addEventListener('click', () => openEditor(null));
 /* ---------- more: stats, backup, import ---------- */
 function refreshCounts(){
   const all = Object.values(books);
-  const own = all.filter(b=>b.status==='own').length;
+  const own = all.filter(b=>isOwned(b.status)).length;
   $('#hdrCount').textContent = own ? own + (own===1?' book':' books') : '';
 }
 function renderMore(){
   const all = Object.values(books);
-  $('#stOwn').textContent = all.filter(b=>b.status==='own').length;
-  $('#stWish').textContent = all.filter(b=>b.status==='wish').length;
-  $('#stAuth').textContent = new Set(all.flatMap(b=>b.authors||[]).map(a=>a.toLowerCase())).size;
+  const count = s => all.filter(b => b.status === s).length;
+  $('#stRead').textContent = count('read');
+  $('#stTbr').textContent = count('tbr');
+  $('#stWish').textContent = count('wish');
+  $('#stDon').textContent = count('donated');
   $('#backupInfo').textContent = 'Your list is stored on this phone only. ' + (meta.lastBackup ? 'Last backup: ' + new Date(meta.lastBackup).toLocaleDateString() + '.' : 'You haven’t saved a backup yet.') + ' Save one now and then (to Google Drive, email, etc.).';
   $('#ver').textContent = 'Version ' + VERSION + '.';
   const missing = all.filter(b => b.needsInfo && b.isbn).length;
@@ -463,9 +488,9 @@ $('#exportJson').addEventListener('click', () => {
   meta.lastBackup = Date.now(); saveMeta(); renderMore();
 });
 $('#exportCsv').addEventListener('click', () => {
-  const cols = ['isbn','title','subtitle','authors','publisher','year','pages','status','shelf','notes','added'];
+  const cols = ['isbn','title','subtitle','authors','publisher','year','pages','status','source','notes','added'];
   const q = v => '"' + String(v ?? '').replace(/"/g,'""') + '"';
-  const rows = Object.values(books).map(b => cols.map(c => q(c==='authors' ? (b.authors||[]).join('; ') : c==='added' ? new Date(b.added).toISOString().slice(0,10) : c==='status' ? (b.status==='own'?'owned':'wishlist') : b[c])).join(','));
+  const rows = Object.values(books).map(b => cols.map(c => q(c==='authors' ? (b.authors||[]).join('; ') : c==='added' ? new Date(b.added).toISOString().slice(0,10) : c==='status' ? (STATUS_LABEL[b.status]||'') : c==='source' ? (SOURCE_LABEL[b.source]||'') : b[c])).join(','));
   download(`shelfscan-${stamp()}.csv`, '﻿' + cols.join(',') + '\n' + rows.join('\n'), 'text/csv');
 });
 
@@ -491,7 +516,7 @@ function importCSV(text){
   const iI13 = find('isbn13','isbn_13','isbn-13','ean_isbn13','ean'), iI = find('isbn','upc_isbn10','isbn10'),
         iT = find('title'), iA = find('author','authors','creators','primary author'),
         iY = find('year published','year','publication year','publish_date','date published'),
-        iP = find('publisher'), iS = find('exclusive shelf','status','read status'), iSh = h.findIndex(x => ['shelf','location','collection','room'].includes(x)),
+        iP = find('publisher'), iS = find('exclusive shelf','status','read status'), iSrc = find('source'),
         iN = find('notes','private notes','comments');
   const out = [];
   for (const r of rows.slice(1)){
@@ -505,8 +530,8 @@ function importCSV(text){
       isbn, title: title || ('ISBN ' + isbn), needsInfo: !title,
       authors: g(iA) ? g(iA).split(/;|\s&\s|\|/).map(s=>s.trim()).filter(Boolean) : [],
       year: (g(iY).match(/\d{4}/)||[''])[0], publisher: g(iP),
-      status: /to-read|want|wish|planned/.test(st) ? 'wish' : 'own',
-      shelf: iSh !== iS ? g(iSh) : '', notes: g(iN)
+      status: mapStatusText(st),
+      source: mapSourceText(g(iSrc)), notes: g(iN)
     });
   }
   return out;
@@ -525,7 +550,7 @@ $('#importFile').addEventListener('change', async e => {
     if (b.isbn){ const n = normalize(b.isbn); if (n.isbn) isbn = n.isbn; }
     const id = isbn || b.id || ('m-' + Date.now() + '-' + added);
     if (books[id] || (!isbn && Object.values(books).some(x => normTitle(x.title) === normTitle(b.title)))){ skipped++; continue; }
-    books[id] = Object.assign({shelf:'', notes:'', authors:[], cover:'', subtitle:'', publisher:'', year:'', pages:'', added: Date.now()}, b, {id, isbn, status: b.status === 'wish' ? 'wish' : 'own'});
+    books[id] = Object.assign({source:'', notes:'', authors:[], cover:'', subtitle:'', publisher:'', year:'', pages:'', added: Date.now()}, b, {id, isbn, status: normStatus(b.status), source: SOURCE_LABEL[b.source] ? b.source : ''});
     added++;
   }
   save(); e.target.value = '';

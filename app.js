@@ -1,6 +1,6 @@
 /* ShelfScan — personal book inventory. All data stays on this device (localStorage). */
 {
-const VERSION = '1.1.0';
+const VERSION = '1.1.2';
 const KEY = 'shelfscan.books.v1';
 const META = 'shelfscan.meta.v1';
 const $ = s => document.querySelector(s);
